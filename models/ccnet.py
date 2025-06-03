@@ -7,14 +7,14 @@ import math
 import warnings
 
 class GaborConv2d(nn.Module):
-    '''
-    DESCRIPTION: an implementation of the Learnable Gabor Convolution (LGC) layer \n
-    INPUTS: \n
-    channel_in: should be 1 \n
-    channel_out: number of the output channels \n
-    kernel_size, stride, padding: 2D convolution parameters \n
-    init_ratio: scale factor of the initial parameters (receptive filed) \n
-    '''
+    \'\'\'
+    DESCRIPTION: an implementation of the Learnable Gabor Convolution (LGC) layer \\n
+    INPUTS: \\n
+    channel_in: should be 1 \\n
+    channel_out: number of the output channels \\n
+    kernel_size, stride, padding: 2D convolution parameters \\n
+    init_ratio: scale factor of the initial parameters (receptive filed) \\n
+    \'\'\'
     def __init__(self, channel_in, channel_out, kernel_size, stride=1, padding=0, init_ratio=1):
         super(GaborConv2d, self).__init__()
 
@@ -77,7 +77,7 @@ class GaborConv2d(nn.Module):
         y_theta = -x * torch.sin(theta.view(-1, 1, 1, 1)) + y * torch.cos(theta.view(-1, 1, 1, 1))  
                 
         gb = -torch.exp(
-            -0.5 * ((gamma * x_theta) ** 2 + y_theta ** 2) / (8*sigma.view(-1, 1, 1, 1) ** 2)) \
+            -0.5 * ((gamma * x_theta) ** 2 + y_theta ** 2) / (8*sigma.view(-1, 1, 1, 1) ** 2)) \\
             * torch.cos(2 * math.pi * f.view(-1, 1, 1, 1) * x_theta + psi.view(-1, 1, 1, 1))
     
         gb = gb - gb.mean(dim=[2,3], keepdim=True)
@@ -112,22 +112,22 @@ class SELayer(nn.Module):
 
 
 class CompetitiveBlock_Mul_Ord_Comp(nn.Module):
-    '''
+    \'\'\'
     DESCRIPTION: an implementation of the Competitive Block::
 
-    [CB = LGC + argmax + PPU] \n
+    [CB = LGC + argmax + PPU] \\n
 
-    INPUTS: \n
+    INPUTS: \\n
 
-    channel_in: only support 1 \n
-    n_competitor: number of channels of the LGC (channel_out)  \n
+    channel_in: only support 1 \\n
+    n_competitor: number of channels of the LGC (channel_out)  \\n
 
-    ksize, stride, padding: 2D convolution parameters \n
+    ksize, stride, padding: 2D convolution parameters \\n
 
-    init_ratio: scale factor of the initial parameters (receptive filed) \n
+    init_ratio: scale factor of the initial parameters (receptive filed) \\n
 
     o1, o2: numbers of channels of the conv_1 and conv_2 layers in the PPU, respectively. (PPU parameters)
-    '''
+    \'\'\'
 
     def __init__(self, channel_in, n_competitor, ksize, stride, padding,weight, init_ratio=1, o1=32, o2=12):
         super(CompetitiveBlock_Mul_Ord_Comp, self).__init__()
@@ -316,10 +316,10 @@ class BasicMultiScaleFusion(nn.Module):
 
 # 🔧 수정된 CCNet 클래스
 class ccnet(torch.nn.Module):
-    '''
+    \'\'\'
     Enhanced CCNet with Multi-Scale Fusion
     기존 CCNet + Multi-Scale Fusion 적용
-    '''
+    \'\'\'
 
     def __init__(self, num_classes, weight):
         super(ccnet, self).__init__()
@@ -413,13 +413,13 @@ if __name__ == "__main__":
     net = ccnet(num_classes=600, weight=0.8)
     net.eval()
     
-    print("\n🚀 기본 Forward 테스트:")
+    print("\\n🚀 기본 Forward 테스트:")
     with torch.no_grad():
         output, features = net(dummy_input)
         print(f"  출력 shape: {output.shape}")
         print(f"  특징 벡터 shape: {features.shape}")
     
-    print("\n🔍 Multi-Scale Fusion 분석:")
+    print("\\n🔍 Multi-Scale Fusion 분석:")
     with torch.no_grad():
         output, features, analysis = net(dummy_input, return_analysis=True)
         scale_weights = analysis['scale_weights']
@@ -431,11 +431,11 @@ if __name__ == "__main__":
         print(f"    Small (CB3):  {scale_weights[:, 2].mean():.3f}")
         print(f"  특징 품질 평균: {feature_quality.mean():.3f}")
     
-    print("\n🎯 getFeatureCode 테스트:")
+    print("\\n🎯 getFeatureCode 테스트:")
     with torch.no_grad():
         feature_code = net.getFeatureCode(dummy_input)
         print(f"  특징 코드 shape: {feature_code.shape}")
         print(f"  정규화 확인: {torch.norm(feature_code[0]).item():.6f} (1에 가까워야 함)")
     
-    print("\n✅ 모든 테스트 통과!")
+    print("\\n✅ 모든 테스트 통과!")
     print("="*60)
