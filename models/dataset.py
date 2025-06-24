@@ -1,3 +1,4 @@
+# -*- coding:utf-8 -*-
 import os
 from PIL import Image
 import numpy as np
@@ -23,7 +24,7 @@ class NormSingleROI(object):
 
         c,h,w = tensor.size()
    
-        if c != 1:  # 🔧 수정: "is not" -> "!="
+        if c is not 1:
             raise TypeError('only support graysclae image.')
 
         # print(tensor.size)
@@ -48,11 +49,11 @@ class NormSingleROI(object):
 
 
 class MyDataset(data.Dataset):
-    \'\'\'
+    '''
     Load and process the ROI images::
 
     INPUT::
-    txt: a text file containing pathes & labels of the input images \\n
+    txt: a text file containing pathes & labels of the input images \n
     transforms: None 
     train: True for a training set, and False for a testing set
     imside: the image size of the output image [imside x imside]
@@ -60,7 +61,7 @@ class MyDataset(data.Dataset):
 
     OUTPUT::
     [batch, outchannels, imside, imside]
-    \'\'\'
+    '''
     
     def __init__(self, txt, transforms=None, train=True, imside = 128, outchannels = 1):        
 
@@ -83,19 +84,6 @@ class MyDataset(data.Dataset):
                     
                     ]) 
             else:
-                # 🔧 수정: torchvision 호환성 개선
-                try:
-                    # 최신 torchvision (v0.8+)에서는 interpolation 사용
-                    rotation_transform = T.RandomRotation(degrees=10, interpolation=Image.BICUBIC, expand=False, center=(0.5*self.imside, 0.0))
-                except TypeError:
-                    # 구버전 torchvision에서는 resample 사용
-                    rotation_transform = T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.5*self.imside, 0.0))
-                
-                try:
-                    rotation_transform2 = T.RandomRotation(degrees=10, interpolation=Image.BICUBIC, expand=False, center=(0.0, 0.5*self.imside))
-                except TypeError:
-                    rotation_transform2 = T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.0, 0.5*self.imside))
-                
                 self.transforms = T.Compose([  
                                 
                     T.Resize(self.imside),
@@ -104,8 +92,8 @@ class MyDataset(data.Dataset):
                         T.RandomResizedCrop(size=self.imside, scale=(0.8,1.0), ratio=(1.0, 1.0)),
                         T.RandomPerspective(distortion_scale=0.15, p=1),# (0.1, 0.2) (0.05, 0.05)
                         T.RandomChoice(transforms=[
-                            rotation_transform,
-                            rotation_transform2,
+                            T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.5*self.imside, 0.0)),
+                            T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.0, 0.5*self.imside)),
                         ]),
                     ]),     
 
