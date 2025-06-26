@@ -16,8 +16,8 @@ import numpy as np
 import cv2 as cv
 
 # Import our enhanced modules
-from enhanced_ccnet import EnhancedCCNet
-from enhanced_loss_functions import EnhancedCCNetLoss, ContrastiveLoss
+from enhanced_ccnet import CCNet_v2
+from enhanced_loss_functions import CCNetLoss_v2, ContrastiveLoss
 from models import MyDataset
 from utils import *
 
