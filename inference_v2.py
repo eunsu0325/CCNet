@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
 # Import enhanced modules
-from enhanced_ccnet import EnhancedCCNet
+from models.ccnet_v2 import EnhancedCCNet
 from models import MyDataset
 from utils import *
 

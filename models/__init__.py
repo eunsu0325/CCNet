@@ -1,6 +1,6 @@
 # models/__init__.py 수정
 from models.ccnet import ccnet
-from models.enhanced_ccnet import EnhancedCCNet
+from models.ccnet_v2 import EnhancedCCNet
 from models.dataset import MyDataset
 from models.dataset import NormSingleROI
 
