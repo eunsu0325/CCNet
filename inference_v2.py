@@ -6,7 +6,7 @@ import sys
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-import torch.nn.functional as F
+import torch.nn.functional as F  # 추가된 import
 from torch.nn import DataParallel
 import torch.optim as optim
 from torch.optim import lr_scheduler
@@ -22,8 +22,8 @@ import cv2 as cv
 import matplotlib.pyplot as plt
 plt.switch_backend('agg')
 
-# Import enhanced modules
-from models.ccnet_v2 import EnhancedCCNet
+# Import enhanced modules - 수정된 import
+from models.ccnet_v2 import EnhancedCCNet  # 올바른 import 경로
 from models import MyDataset
 from utils import *
 
