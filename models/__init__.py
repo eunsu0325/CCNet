@@ -1,17 +1,11 @@
 # models/__init__.py 수정
 from models.ccnet import ccnet
-from models.ccnet_v2 import EnhancedCCNet
+from models.ccnet_v2 import EnhancedCCNet  # 수정: CCNet_v2 -> EnhancedCCNet
 from models.dataset import MyDataset
 from models.dataset import NormSingleROI
 
-# enhanced_ccnet.py 의 import 수정을 위한 패치
-"""
-enhanced_ccnet.py 파일 상단에 다음을 추가:
-
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-"""
+import torch
+import torch.nn.functional as F
 
 # 기존 ccnet과의 호환성을 위한 래퍼 클래스
 class CCNetCompatibilityWrapper:
@@ -117,33 +111,6 @@ def get_recommended_hyperparameters(dataset_name):
     return RECOMMENDED_HYPERPARAMETERS.get(dataset_name, RECOMMENDED_HYPERPARAMETERS["Tongji"])
 
 
-# 기존 train.py에서 Enhanced CCNet을 사용하기 위한 최소 수정사항
-def patch_existing_train_script():
-    """
-    기존 train.py를 Enhanced CCNet으로 교체하기 위한 패치 가이드
-    
-    1. import 추가:
-       from enhanced_ccnet import EnhancedCCNet
-       from enhanced_loss_functions import EnhancedCCNetLoss
-    
-    2. 모델 생성 부분 교체:
-       기존: net = ccnet(num_classes=num_classes, weight=comp_weight)
-       변경: net = EnhancedCCNet(num_classes=num_classes, weight=comp_weight, num_experts=3)
-    
-    3. 손실 함수 교체:
-       기존: criterion = nn.CrossEntropyLoss()
-       변경: criterion = EnhancedCCNetLoss(lambda_okd=1.0, lambda_cd=5e-8, temperature=3.0)
-    
-    4. forward pass 수정:
-       기존: output, fe1 = model(data, target)
-       변경: expert_logits, expert_features = model(data)
-             ensemble_output = model.get_ensemble_prediction(expert_logits)
-             expert_weights = model.get_expert_weights()
-             loss_dict = criterion(expert_logits, expert_weights, target)
-    """
-    pass
-
-
 # 디버깅 및 검증을 위한 유틸리티 함수들
 def validate_model_output(model, sample_input):
     """
@@ -172,7 +139,7 @@ def check_loss_computation(model, sample_input, sample_target):
     """
     손실 함수 계산 검증
     """
-    from enhanced_loss_functions import EnhancedCCNetLoss
+    from loss_v2 import EnhancedCCNetLoss  # 수정된 import
     
     model.train()
     criterion = EnhancedCCNetLoss()
@@ -194,34 +161,13 @@ def check_loss_computation(model, sample_input, sample_target):
         return False
 
 
-# 메모리 사용량 최적화를 위한 팁들
-def optimize_memory_usage():
-    """
-    메모리 사용량 최적화 가이드
-    
-    1. 그래디언트 체크포인팅 사용:
-       from torch.utils.checkpoint import checkpoint
-       
-    2. 혼합 정밀도 훈련:
-       from torch.cuda.amp import autocast, GradScaler
-       
-    3. 배치 크기 조정:
-       - 3 experts일 때: batch_size를 기존의 2/3로 설정
-       - GPU 메모리에 따라 동적 조정
-    
-    4. 특징 캐싱:
-       - 훈련 중 일부 특징을 디스크에 캐시
-    """
-    pass
-
-
 # 마이그레이션 체크리스트
 MIGRATION_CHECKLIST = """
 Enhanced CCNet 마이그레이션 체크리스트:
 
-□ 1. enhanced_ccnet.py 파일 추가
-□ 2. enhanced_loss_functions.py 파일 추가  
-□ 3. models/__init__.py에 import 추가
+□ 1. models/ccnet_v2.py 파일 확인
+□ 2. loss_v2.py 파일 확인  
+□ 3. models/__init__.py에 올바른 import 확인
 □ 4. 기존 데이터셋 파일들 확인 (train/test txt files)
 □ 5. GPU 메모리 충분한지 확인 (기존 대비 약 1.5~2배 필요)
 □ 6. 하이퍼파라미터 설정 확인
