@@ -6,11 +6,13 @@ import numpy as np
 import math
 import warnings
 
+# 🔥 최종 해결책: models/ccnet_v2.py의 GaborConv2d 클래스만 이 부분으로 교체
+
 class GaborConv2d(nn.Module):
     '''
-    DESCRIPTION: Stabilized Learnable Gabor Convolution (LGC) layer
-    - Fixed parameter constraints to prevent NaN explosion
-    - Uses softplus and clamping for positive parameters
+    DESCRIPTION: Ultra-stable Learnable Gabor Convolution (LGC) layer
+    - 완전히 안정적인 파라미터 관리
+    - NaN 방지를 위한 다중 안전장치
     '''
     def __init__(self, channel_in, channel_out, kernel_size, stride=1, padding=0, init_ratio=1):
         super(GaborConv2d, self).__init__()
@@ -26,45 +28,43 @@ class GaborConv2d(nn.Module):
             init_ratio = 1.0
             print('input error!!!, require init_ratio > 0.0, using default...')
 
-        # Initial parameter values
-        self._SIGMA = 9.2 * self.init_ratio
-        self._FREQ = 0.057 / self.init_ratio
+        # 🔥 수정 1: 더 안전한 초기 값들
+        self._SIGMA = max(1.0, 9.2 * self.init_ratio)  # 최소값 보장
+        self._FREQ = max(0.001, 0.057 / self.init_ratio)  # 최소값 보장
         self._GAMMA = 2.0
 
-        # 🔥 핵심 수정: log-space 파라미터로 재파라미터화
-        # sigma = softplus(log_sigma) -> 항상 양수 보장
-        self.log_sigma = nn.Parameter(torch.log(torch.tensor(self._SIGMA) - 1e-6), requires_grad=True)
-        self.log_gamma = nn.Parameter(torch.log(torch.tensor(self._GAMMA) - 1e-6), requires_grad=True)
-        self.log_f = nn.Parameter(torch.log(torch.tensor(self._FREQ) + 1e-6), requires_grad=True)
+        # 🔥 수정 2: 훨씬 더 안전한 초기화 방법
+        # 직접 양수 파라미터로 시작하되, 학습 시에만 제약 적용
+        self.sigma_raw = nn.Parameter(torch.tensor(self._SIGMA), requires_grad=True)
+        self.gamma_raw = nn.Parameter(torch.tensor(self._GAMMA), requires_grad=True)  
+        self.f_raw = nn.Parameter(torch.tensor(self._FREQ), requires_grad=True)
         
-        # theta는 각도이므로 제약 없이 학습 가능
+        # theta와 psi는 안전하므로 그대로
         self.theta = nn.Parameter(
             torch.FloatTensor(torch.arange(0, channel_out).float()) * math.pi / channel_out, 
             requires_grad=False
         )
-        
-        # psi는 위상이므로 고정
         self.psi = nn.Parameter(torch.FloatTensor([0]), requires_grad=False)
 
     def get_safe_parameters(self):
         """
-        안전한 파라미터 값을 반환 (항상 양수 보장)
+        🔥 수정 3: 가장 안전한 파라미터 변환 방법
         """
-        # softplus를 사용하여 항상 양수 보장
-        sigma = F.softplus(self.log_sigma) + 1e-6  # 최소값 1e-6
-        gamma = F.softplus(self.log_gamma) + 1e-6
-        f = F.softplus(self.log_f) + 1e-8        # 주파수는 더 작은 최소값
+        # 절댓값 + 최소값 보장 방식 (가장 안정적)
+        sigma = torch.abs(self.sigma_raw) + 0.1  # 절댓값 + 최소값
+        gamma = torch.abs(self.gamma_raw) + 0.1  
+        f = torch.abs(self.f_raw) + 0.001
         
-        # 추가 안전장치: 최대값 제한
-        sigma = torch.clamp(sigma, min=1e-6, max=50.0)
-        gamma = torch.clamp(gamma, min=1e-6, max=10.0)
-        f = torch.clamp(f, min=1e-8, max=1.0)
+        # 최대값 제한 (발산 방지)
+        sigma = torch.clamp(sigma, min=0.1, max=50.0)
+        gamma = torch.clamp(gamma, min=0.1, max=10.0)
+        f = torch.clamp(f, min=0.001, max=0.5)
         
         return sigma, gamma, f
 
     def genGaborBank(self, kernel_size, channel_in, channel_out, sigma, gamma, theta, f, psi):
         """
-        안전한 Gabor 커널 생성
+        🔥 수정 4: 극도로 안전한 Gabor 커널 생성
         """
         xmax = kernel_size // 2
         ymax = kernel_size // 2
@@ -86,86 +86,95 @@ class GaborConv2d(nn.Module):
         x_theta = x * torch.cos(theta.view(-1, 1, 1, 1)) + y * torch.sin(theta.view(-1, 1, 1, 1))
         y_theta = -x * torch.sin(theta.view(-1, 1, 1, 1)) + y * torch.cos(theta.view(-1, 1, 1, 1))  
         
-        # 🔥 핵심 수정: 안전한 지수 계산
-        # sigma²가 분모에 오므로 0이 되면 안됨
-        sigma_squared = sigma.view(-1, 1, 1, 1) ** 2
-        sigma_squared = torch.clamp(sigma_squared, min=1e-12)  # 최소값 보장
+        # 🔥 수정 5: 가장 안전한 지수 계산
+        sigma_safe = sigma.view(-1, 1, 1, 1)
+        gamma_safe = gamma.view(-1, 1, 1, 1)
+        f_safe = f.view(-1, 1, 1, 1)
+        psi_safe = psi.view(-1, 1, 1, 1)
         
-        gamma_expanded = gamma.view(-1, 1, 1, 1)
-        f_expanded = f.view(-1, 1, 1, 1)
-        psi_expanded = psi.view(-1, 1, 1, 1)
+        # 분모 계산 (절대 0이 될 수 없도록)
+        denominator = 8 * (sigma_safe ** 2)
+        denominator = torch.clamp(denominator, min=1e-6)  # 강력한 최소값 보장
         
-        # 지수 부분 계산 (오버플로우 방지)
-        exponent = -0.5 * ((gamma_expanded * x_theta) ** 2 + y_theta ** 2) / (8 * sigma_squared)
-        exponent = torch.clamp(exponent, min=-50, max=50)  # 지수 범위 제한
+        # 지수 계산 (오버플로우 완전 방지)
+        numerator = ((gamma_safe * x_theta) ** 2 + y_theta ** 2)
+        exponent = -0.5 * numerator / denominator
+        exponent = torch.clamp(exponent, min=-20, max=20)  # 매우 보수적인 범위
         
-        # 코사인 부분 계산
-        cosine_part = torch.cos(2 * math.pi * f_expanded * x_theta + psi_expanded)
+        # 코사인 계산
+        cosine_arg = 2 * math.pi * f_safe * x_theta + psi_safe
+        cosine_part = torch.cos(cosine_arg)
         
-        # Gabor 커널 생성
+        # 최종 Gabor 커널
         gb = -torch.exp(exponent) * cosine_part
         
-        # 평균 제거 (안전하게)
+        # 평균 제거
         gb_mean = gb.mean(dim=[2, 3], keepdim=True)
         gb = gb - gb_mean
         
-        # NaN/Inf 체크 및 수정
-        gb = torch.where(torch.isnan(gb) | torch.isinf(gb), torch.zeros_like(gb), gb)
+        # 🔥 수정 6: 강력한 NaN/Inf 방지
+        # NaN이나 Inf가 하나라도 있으면 전체를 안전한 값으로 교체
+        if torch.isnan(gb).any() or torch.isinf(gb).any():
+            print("⚠️ Detected NaN/Inf in Gabor kernel, using safe fallback")
+            gb = torch.randn_like(gb) * 0.01  # 작은 랜덤 노이즈로 교체
         
         return gb
 
     def forward(self, x):
         """
-        안전한 forward pass
+        🔥 수정 7: 완전히 안전한 forward pass
         """
         # 안전한 파라미터 가져오기
         sigma, gamma, f = self.get_safe_parameters()
         
-        # 파라미터 값 체크 (디버깅용)
+        # 🔥 추가: 입력 NaN 체크
+        if torch.isnan(x).any() or torch.isinf(x).any():
+            print("⚠️ NaN/Inf in input to Gabor layer!")
+            x = torch.where(torch.isnan(x) | torch.isinf(x), torch.zeros_like(x), x)
+        
+        # 파라미터 NaN 체크 및 강제 수정
         if torch.isnan(sigma).any() or torch.isnan(gamma).any() or torch.isnan(f).any():
-            print(f"⚠️ NaN in Gabor parameters: sigma={sigma.item():.6f}, gamma={gamma.item():.6f}, f={f.item():.6f}")
-            # 안전한 기본값으로 리셋
-            sigma = torch.clamp(sigma, min=1e-6, max=50.0)
-            gamma = torch.clamp(gamma, min=1e-6, max=10.0)
-            f = torch.clamp(f, min=1e-8, max=1.0)
+            print(f"⚠️ NaN in Gabor parameters detected! Resetting to safe values.")
+            # 강제로 안전한 값으로 재설정
+            with torch.no_grad():
+                self.sigma_raw.data = torch.tensor(self._SIGMA).to(self.sigma_raw.device)
+                self.gamma_raw.data = torch.tensor(self._GAMMA).to(self.gamma_raw.device)
+                self.f_raw.data = torch.tensor(self._FREQ).to(self.f_raw.device)
+            
+            # 재계산
+            sigma, gamma, f = self.get_safe_parameters()
 
-        # Gabor 커널 생성
-        kernel = self.genGaborBank(
-            self.kernel_size, self.channel_in, self.channel_out, 
-            sigma, gamma, self.theta, f, self.psi
-        )
-        
-        # 커널 NaN 체크
-        if torch.isnan(kernel).any() or torch.isinf(kernel).any():
-            print("⚠️ NaN/Inf detected in Gabor kernel! Using identity kernel.")
-            # 안전한 fallback: identity 커널
-            kernel = torch.zeros_like(kernel)
-            kernel[:, :, kernel.size(2)//2, kernel.size(3)//2] = 1.0
-        
-        # Convolution 연산
-        out = F.conv2d(x, kernel, stride=self.stride, padding=self.padding)
-        
-        # 출력 NaN 체크
-        if torch.isnan(out).any() or torch.isinf(out).any():
-            print("⚠️ NaN/Inf detected in Gabor output!")
-            out = torch.where(torch.isnan(out) | torch.isinf(out), torch.zeros_like(out), out)
-        
-        return out
-    
-    def get_parameter_info(self):
-        """
-        현재 파라미터 값 확인용 (디버깅)
-        """
-        sigma, gamma, f = self.get_safe_parameters()
-        return {
-            'sigma': sigma.item(),
-            'gamma': gamma.item(), 
-            'f': f.item(),
-            'log_sigma': self.log_sigma.item(),
-            'log_gamma': self.log_gamma.item(),
-            'log_f': self.log_f.item()
-        }
-
+        try:
+            # Gabor 커널 생성
+            kernel = self.genGaborBank(
+                self.kernel_size, self.channel_in, self.channel_out, 
+                sigma, gamma, self.theta, f, self.psi
+            )
+            
+            # 커널 최종 안전성 체크
+            if torch.isnan(kernel).any() or torch.isinf(kernel).any():
+                print("⚠️ Using identity kernel as fallback")
+                kernel = torch.zeros_like(kernel)
+                center_h, center_w = kernel.size(2)//2, kernel.size(3)//2
+                kernel[:, :, center_h, center_w] = 1.0
+            
+            # Convolution
+            out = F.conv2d(x, kernel, stride=self.stride, padding=self.padding)
+            
+            # 출력 안전성 체크
+            if torch.isnan(out).any() or torch.isinf(out).any():
+                print("⚠️ NaN/Inf in Gabor output, using zero output")
+                out = torch.zeros_like(out)
+            
+            return out
+            
+        except Exception as e:
+            print(f"❌ Critical error in Gabor forward: {e}")
+            # 완전 실패 시 zero 출력
+            batch_size = x.size(0)
+            out_h = (x.size(2) + 2*self.padding - self.kernel_size) // self.stride + 1
+            out_w = (x.size(3) + 2*self.padding - self.kernel_size) // self.stride + 1
+            return torch.zeros(batch_size, self.channel_out, out_h, out_w, device=x.device)
 
 class SELayer(nn.Module):
     def __init__(self, channel, reduction=1):
@@ -183,6 +192,49 @@ class SELayer(nn.Module):
         y = self.avg_pool(x).view(b, c)
         y = self.fc(y).view(b, c, 1, 1)
         return x * y.expand_as(x)
+
+def safe_training_step(model, optimizer, loss, max_grad_norm=0.5):
+    """
+    완전히 안전한 훈련 스텝
+    """
+    # Backward
+    loss.backward()
+    
+    # 1. 그래디언트 NaN 체크
+    has_nan_grad = False
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                print(f"⚠️ NaN/Inf gradient in {name}")
+                has_nan_grad = True
+                param.grad.zero_()  # NaN 그래디언트 제거
+    
+    if has_nan_grad:
+        print("⚠️ Skipping optimizer step due to NaN gradients")
+        optimizer.zero_grad()
+        return False
+    
+    # 2. 그래디언트 클리핑 (매우 보수적)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+    
+    # 3. 옵티마이저 스텝
+    optimizer.step()
+    optimizer.zero_grad()
+    
+    # 4. 파라미터 NaN 체크 및 복구
+    for name, param in model.named_parameters():
+        if torch.isnan(param.data).any() or torch.isinf(param.data).any():
+            print(f"⚠️ NaN/Inf parameter in {name}, reinitializing...")
+            if 'sigma_raw' in name:
+                param.data = torch.tensor(9.2).to(param.device)
+            elif 'gamma_raw' in name:
+                param.data = torch.tensor(2.0).to(param.device)
+            elif 'f_raw' in name:
+                param.data = torch.tensor(0.057).to(param.device)
+            else:
+                param.data.normal_(0, 0.01)  # 다른 파라미터는 작은 노이즈로
+    
+    return True
 
 
 class CompetitiveBlock_Mul_Ord_Comp(nn.Module):

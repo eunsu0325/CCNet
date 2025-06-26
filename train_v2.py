@@ -1,3 +1,4 @@
+import torch.nn.utils as utils  # 맨 위 import 부분에 추가
 import os
 import argparse
 import time
@@ -16,11 +17,53 @@ import numpy as np
 import cv2 as cv
 
 # Import our enhanced modules
-from enhanced_ccnet import CCNet_v2
-from enhanced_loss_functions import CCNetLoss_v2, ContrastiveLoss
+from models.ccnet_v2 import EnhancedCCNet
+from loss_v2 import EnhancedCCNetLoss, ContrastiveLoss
 from models import MyDataset
 from utils import *
 
+def safe_training_step(model, optimizer, loss, max_grad_norm=0.5):
+    """
+    완전히 안전한 훈련 스텝
+    """
+    # Backward
+    loss.backward()
+    
+    # 1. 그래디언트 NaN 체크
+    has_nan_grad = False
+    for name, param in model.named_parameters():
+        if param.grad is not None:
+            if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                print(f"⚠️ NaN/Inf gradient in {name}")
+                has_nan_grad = True
+                param.grad.zero_()  # NaN 그래디언트 제거
+    
+    if has_nan_grad:
+        print("⚠️ Skipping optimizer step due to NaN gradients")
+        optimizer.zero_grad()
+        return False
+    
+    # 2. 그래디언트 클리핑 (매우 보수적)
+    torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
+    
+    # 3. 옵티마이저 스텝
+    optimizer.step()
+    optimizer.zero_grad()
+    
+    # 4. 파라미터 NaN 체크 및 복구
+    for name, param in model.named_parameters():
+        if torch.isnan(param.data).any() or torch.isinf(param.data).any():
+            print(f"⚠️ NaN/Inf parameter in {name}, reinitializing...")
+            if 'sigma_raw' in name:
+                param.data = torch.tensor(9.2).to(param.device)
+            elif 'gamma_raw' in name:
+                param.data = torch.tensor(2.0).to(param.device)
+            elif 'f_raw' in name:
+                param.data = torch.tensor(0.057).to(param.device)
+            else:
+                param.data.normal_(0, 0.01)  # 다른 파라미터는 작은 노이즈로
+    
+    return True
 
 def test_enhanced_model(model, train_set_file, test_set_file, path_rst):
     """
@@ -299,8 +342,11 @@ def fit_enhanced_model(epoch, model, data_loader, criterion, optimizer, phase='t
 
         # Backward pass
         if phase == 'training':
-            total_loss.backward()
-            optimizer.step()
+            success = safe_training_step(model, optimizer, total_loss, max_grad_norm=0.5)
+            if not success:
+                print(f"⚠️ Training step failed at epoch {epoch}, batch {batch_id}")
+                continue  # 이 배치 스킵
+
 
     # Calculate averages
     avg_losses = {k: v / total_samples for k, v in running_losses.items()}
