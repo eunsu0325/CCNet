@@ -433,7 +433,19 @@ def main():
     )
     
     # Optimizer and scheduler
-    optimizer = optim.Adam(model.parameters(), lr=args.lr)
+    gabor_params = []
+    other_params = []
+
+    for name, param in model.named_parameters():
+        if 'logit' in name:  # Gabor의 logit 파라미터들
+            gabor_params.append(param)
+        else:
+            other_params.append(param)
+
+    optimizer = optim.Adam([
+        {'params': other_params, 'lr': args.lr},
+        {'params': gabor_params, 'lr': args.lr * 0.01}  # Gabor는 1% 학습률
+    ], weight_decay=1e-4)
     scheduler = lr_scheduler.StepLR(optimizer, step_size=args.redstep, gamma=0.8)
     
     # Training loop
