@@ -21,10 +21,10 @@ class NormSingleROI(object):
         # if not T.functional._is_tensor_image(tensor):
         #     raise TypeError('tensor is not a torch image.')
 
+
         c,h,w = tensor.size()
    
-        # 수정: is not 1 -> != 1
-        if c != 1:
+        if c is not 1:
             raise TypeError('only support graysclae image.')
 
         # print(tensor.size)
@@ -92,9 +92,8 @@ class MyDataset(data.Dataset):
                         T.RandomResizedCrop(size=self.imside, scale=(0.8,1.0), ratio=(1.0, 1.0)),
                         T.RandomPerspective(distortion_scale=0.15, p=1),# (0.1, 0.2) (0.05, 0.05)
                         T.RandomChoice(transforms=[
-                            # 수정: resample -> interpolation
-                            T.RandomRotation(degrees=10, interpolation=T.InterpolationMode.BICUBIC, expand=False, center=(0.5*self.imside, 0.0)),
-                            T.RandomRotation(degrees=10, interpolation=T.InterpolationMode.BICUBIC, expand=False, center=(0.0, 0.5*self.imside)),
+                            T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.5*self.imside, 0.0)),
+                            T.RandomRotation(degrees=10, resample=Image.BICUBIC, expand=False, center=(0.0, 0.5*self.imside)),
                         ]),
                     ]),     
 
